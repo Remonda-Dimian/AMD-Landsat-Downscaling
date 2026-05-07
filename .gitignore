@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ==========================================
+# Remote Sensing Data & Custom Folders
+# ==========================================
+*.tif
+*.tiff
+*.nc
+*.hdf
+Data/
+Inputs/
+Outputs/
