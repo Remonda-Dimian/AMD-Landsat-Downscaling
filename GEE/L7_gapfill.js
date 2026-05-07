@@ -1,31 +1,74 @@
-// -----------------------------------------
-// Landsat-7 SLC-off Gap Filling using Landsat-5
-// -----------------------------------------
+// ============================================
+// AMD Part 1: SLC-off Gap-Filling (RGB)
+// Eqs. (1)-(2). Landsat-5 TM → Landsat-7 ETM+.
+// ============================================
 
-// Load Landsat-7 and Landsat-5 images
-var l7 = ee.Image('LANDSAT/LE07/C02/T1_L2/LE07_XXXXX');
-var l5 = ee.Image('LANDSAT/LT05/C02/T1_L2/LT05_XXXXX');
+var CROSS_CAL = {
+  'B1': {a: 0.943, b: 0.012}, // Blue
+  'B2': {a: 0.956, b: 0.008}, // Green
+  'B3': {a: 0.974, b: 0.006}  // Red
+};
 
-// Select harmonized reflectance bands
-var bands = ['SR_B1','SR_B2','SR_B3','SR_B4','SR_B5','SR_B7'];
+function crossCalibrateL5toL7(l5Image, coeffs) {
+  var bands = ['B1', 'B2', 'B3'];
+  var calibrated = bands.map(function(b) {
+    var c = coeffs[b];
+    return l5Image.select(b).multiply(c.a).add(c.b).rename(b);
+  });
+  return ee.Image.cat(calibrated)
+    .copyProperties(l5Image, ['system:time_start', 'system:index']);
+}
 
-l7 = l7.select(bands);
-l5 = l5.select(bands);
+function getInvalidPixelMask(l7Image) {
+  var qa = l7Image.select('QA_PIXEL');
+  return qa.bitwiseAnd(1).eq(0); // 1=valid, 0=invalid/fill
+}
 
-// Radiometric harmonization (example coefficients)
-var slope = 1.02;
-var intercept = -0.001;
+function fillSLCGaps(l7Image, l5Collection, windowDays) {
+  var t = l7Image.date();
+  var start = t.advance(-windowDays, 'day');
+  var end = t.advance(windowDays, 'day');
+  
+  var l5 = l5Collection
+    .filterDate(start, end)
+    .filterBounds(l7Image.geometry())
+    .sort('system:time_start')
+    .first();
+  
+  // Reproject L5 to L7 grid before calibration
+  l5 = ee.Image(l5).reproject({crs: l7Image.projection(), scale: 30});
+  
+  var l5Cal = crossCalibrateL5toL7(l5, CROSS_CAL);
+  var validMask = getInvalidPixelMask(l7Image);
+  
+  var bands = ['B1', 'B2', 'B3'];
+  var filled = bands.map(function(b) {
+    return l7Image.select(b).updateMask(validMask).unmask(l5Cal.select(b)).rename(b);
+  });
+  
+  return ee.Image.cat(filled)
+    .copyProperties(l7Image, l7Image.propertyNames())
+    .set('SLC_FILLED', 1);
+}
 
-var l5_adj = l5.multiply(slope).add(intercept);
+// Usage
+/*
+var aoi = ee.Geometry.Point([79.9, 37.1]);
+var l5Col = ee.ImageCollection('LANDSAT/LT05/C02/T1_L2')
+  .filterBounds(aoi)
+  .filter(ee.Filter.lt('CLOUD_COVER', 20))
+  .map(function(img) {
+    return img.select(['SR_B1','SR_B2','SR_B3','QA_PIXEL'])
+              .rename(['B1','B2','B3','QA_PIXEL']);
+  });
 
-// Identify valid L7 pixels
-var l7_mask = l7.mask();
+var l7Col = ee.ImageCollection('LANDSAT/LE07/C02/T1_L2')
+  .filterBounds(aoi)
+  .filter(ee.Filter.lt('CLOUD_COVER', 20))
+  .map(function(img) {
+    return img.select(['SR_B1','SR_B2','SR_B3','QA_PIXEL'])
+              .rename(['B1','B2','B3','QA_PIXEL']);
+  });
 
-// Fill SLC-off gaps
-var l7_filled = l7.unmask(l5_adj);
-
-// Preserve original mask structure
-l7_filled = l7_filled.updateMask(l7_mask.or(l5_adj.mask()));
-
-// Visualization
-Map.addLayer(l7_filled, {min:0, max:0.3}, 'Gap-filled L7');
+var l7Filled = l7Col.map(function(img) { return fillSLCGaps(img, l5Col, 32); });
+*/
