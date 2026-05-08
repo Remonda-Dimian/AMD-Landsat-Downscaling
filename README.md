@@ -33,7 +33,7 @@ To run the validation scripts, ensure you have Python 3.x installed along with t
 AMD integrates spectral similarity, spatial proximity, and texture-based adaptive weighting to reconstruct physically consistent 10 m reflectance imagery without external training datasets.
 
 ## Citation
-If you use this repository, please cite the associated publication. *( https://zenodo.org/badge/1231517485.svg ) ( https://doi.org/10.5281/zenodo.20077458 )*
+If you use this repository, please cite the associated publication. [![DOI](https://zenodo.org/badge/1231517485.svg)](https://doi.org/10.5281/zenodo.20077458)
 
 ## License
 This repository is distributed under the MIT License.
